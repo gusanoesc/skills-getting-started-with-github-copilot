@@ -10,8 +10,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const response = await fetch("/activities");
       const activities = await response.json();
 
-      // Clear loading message
+      // Clear loading and select options
       activitiesList.innerHTML = "";
+      activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
@@ -19,13 +20,53 @@ document.addEventListener("DOMContentLoaded", () => {
         activityCard.className = "activity-card";
 
         const spotsLeft = details.max_participants - details.participants.length;
+        const participants = Array.isArray(details.participants) ? details.participants : [];
 
         activityCard.innerHTML = `
           <h4>${name}</h4>
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          <div class="participants">
+            <h5>Participants</h5>
+            <div class="participants-content"></div>
+          </div>
         `;
+
+        const participantContent = activityCard.querySelector(".participants-content");
+
+        if (participants.length > 0) {
+          const list = document.createElement("ul");
+          list.className = "participants-list";
+
+          participants.forEach((participant) => {
+            const item = document.createElement("li");
+            item.className = "participant-item";
+
+            const nameSpan = document.createElement("span");
+            nameSpan.textContent = participant;
+
+            const deleteButton = document.createElement("button");
+            deleteButton.className = "participant-delete";
+            deleteButton.type = "button";
+            deleteButton.setAttribute("aria-label", `Unregister ${participant} from ${name}`);
+            deleteButton.innerHTML = "🗑";
+            deleteButton.addEventListener("click", async () => {
+              await unregisterParticipant(name, participant);
+            });
+
+            item.appendChild(nameSpan);
+            item.appendChild(deleteButton);
+            list.appendChild(item);
+          });
+
+          participantContent.appendChild(list);
+        } else {
+          const noParticipants = document.createElement("p");
+          noParticipants.className = "no-participants";
+          noParticipants.textContent = "No participants yet";
+          participantContent.appendChild(noParticipants);
+        }
 
         activitiesList.appendChild(activityCard);
 
@@ -38,6 +79,41 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (error) {
       activitiesList.innerHTML = "<p>Failed to load activities. Please try again later.</p>";
       console.error("Error fetching activities:", error);
+    }
+  }
+
+  // Unregister participant helper
+  async function unregisterParticipant(activity, email) {
+    try {
+      const response = await fetch(
+        `/activities/${encodeURIComponent(activity)}/participants/${encodeURIComponent(email)}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      const result = await response.json();
+
+      if (response.ok) {
+        messageDiv.textContent = result.message;
+        messageDiv.className = "success";
+        messageDiv.classList.remove("hidden");
+        // refresh activities list to reflect the update
+        await fetchActivities();
+      } else {
+        messageDiv.textContent = result.detail || "Failed to unregister participant";
+        messageDiv.className = "error";
+        messageDiv.classList.remove("hidden");
+      }
+
+      setTimeout(() => {
+        messageDiv.classList.add("hidden");
+      }, 5000);
+    } catch (error) {
+      messageDiv.textContent = "Unable to unregister. Please try again.";
+      messageDiv.className = "error";
+      messageDiv.classList.remove("hidden");
+      console.error("Error unregistering participant:", error);
     }
   }
 
